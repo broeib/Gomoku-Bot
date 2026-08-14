@@ -19,7 +19,7 @@ export interface Move {
 
 export type GameMode = 'pve' | 'pvp' | 'eve';
 
-export type Difficulty = 'easy' | 'medium' | 'hard';
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert' | 'god';
 
 export type GameStatus = 'playing' | 'black_win' | 'white_win' | 'draw';
 
@@ -40,6 +40,8 @@ export interface GameStats {
   easy: DifficultyStats;
   medium: DifficultyStats;
   hard: DifficultyStats;
+  expert: DifficultyStats;
+  god: DifficultyStats;
   pvp: {
     blackWins: number;
     whiteWins: number;

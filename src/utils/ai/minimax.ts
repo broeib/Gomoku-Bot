@@ -8,8 +8,15 @@ interface ScoredMove {
   score: number;
 }
 
-// Zobrist Hashing for Board Transposition Cache
-const zobristTable: number[][][] = Array(BOARD_SIZE)
+interface TTEntry {
+  depth: number;
+  score: number;
+  flag: 'EXACT' | 'LOWER' | 'UPPER';
+  bestMove?: Position;
+}
+
+// Zobrist Hashing Table
+const zobristTableHigh: number[][][] = Array(BOARD_SIZE)
   .fill(0)
   .map(() =>
     Array(BOARD_SIZE)
@@ -20,7 +27,8 @@ const zobristTable: number[][][] = Array(BOARD_SIZE)
       ])
   );
 
-const tt = new Map<number, { depth: number; score: number; flag: 'EXACT' | 'LOWER' | 'UPPER' }>();
+// Transposition Table (Map with 64-bit combined string key or number)
+const tt = new Map<number, TTEntry>();
 
 export function getZobristHash(board: BoardState): number {
   let hash = 0;
@@ -28,13 +36,40 @@ export function getZobristHash(board: BoardState): number {
     for (let c = 0; c < BOARD_SIZE; c++) {
       const stone = board[r][c];
       if (stone === 'black') {
-        hash ^= zobristTable[r][c][0];
+        hash ^= zobristTableHigh[r][c][0];
       } else if (stone === 'white') {
-        hash ^= zobristTable[r][c][1];
+        hash ^= zobristTableHigh[r][c][1];
       }
     }
   }
   return hash;
+}
+
+export function clearTranspositionTable(): void {
+  tt.clear();
+}
+
+// Killer Moves Table (2 killer moves per ply up to depth 32)
+const MAX_PLY = 32;
+const killerMoves: (Position | null)[][] = Array(MAX_PLY)
+  .fill(null)
+  .map(() => [null, null]);
+
+// History Heuristic Table
+const historyTable: number[][] = Array(BOARD_SIZE)
+  .fill(0)
+  .map(() => Array(BOARD_SIZE).fill(0));
+
+export function resetSearchTables(): void {
+  for (let p = 0; p < MAX_PLY; p++) {
+    killerMoves[p][0] = null;
+    killerMoves[p][1] = null;
+  }
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      historyTable[r][c] = 0;
+    }
+  }
 }
 
 /**
@@ -56,17 +91,19 @@ export function evaluateBoard(board: BoardState, maxPlayer: StoneType): number {
     }
   }
 
-  // Weight offense slightly higher than defense when evaluating whole board
+  // Weight offensive opportunities slightly higher than defense when evaluating whole board
   return maxScore - minScore * 1.15;
 }
 
 /**
- * Orders candidate moves by local tactical heuristic to maximize Alpha-Beta cutoffs.
+ * Orders candidate moves by local tactical heuristic, TT move, killer moves, and history score.
  */
 export function getOrderedCandidates(
   board: BoardState,
   currentPlayer: StoneType,
-  limit: number = 14
+  limit: number = 14,
+  ttMove?: Position | null,
+  ply: number = 0
 ): Position[] {
   const opponent: StoneType = currentPlayer === 'black' ? 'white' : 'black';
   const candidates = getCandidateMoves(board, 2);
@@ -76,21 +113,49 @@ export function getOrderedCandidates(
   const scoredMoves: ScoredMove[] = [];
 
   for (const pos of candidates) {
+    // 1. If this matches the Transposition Table best move, give it top priority
+    if (ttMove && pos.row === ttMove.row && pos.col === ttMove.col) {
+      scoredMoves.push({ pos, score: 200000000 });
+      continue;
+    }
+
     const attackScore = evaluatePoint(board, pos.row, pos.col, currentPlayer);
     const defenseScore = evaluatePoint(board, pos.row, pos.col, opponent);
 
-    // If this move is an immediate winning move, return it directly
+    // Immediate winning move returns directly
     if (attackScore >= PATTERN_SCORES.WIN_FIVE) {
       return [pos];
     }
 
     // Heuristic combining attack and defense potential
-    let combinedScore = attackScore * 1.05 + defenseScore * 1.0;
+    let combinedScore = attackScore * 1.08 + defenseScore * 1.0;
     if (defenseScore >= PATTERN_SCORES.WIN_FIVE) {
-      combinedScore += PATTERN_SCORES.WIN_FIVE * 0.9;
+      combinedScore += PATTERN_SCORES.WIN_FIVE * 0.95;
     } else if (defenseScore >= PATTERN_SCORES.OPEN_FOUR) {
-      combinedScore += PATTERN_SCORES.OPEN_FOUR * 0.9;
+      combinedScore += PATTERN_SCORES.OPEN_FOUR * 0.92;
+    } else if (defenseScore >= PATTERN_SCORES.OPEN_THREE * 1.5) {
+      combinedScore += PATTERN_SCORES.OPEN_THREE * 1.2;
     }
+
+    // Killer move bonus
+    if (ply < MAX_PLY) {
+      if (
+        killerMoves[ply][0] &&
+        pos.row === killerMoves[ply][0]!.row &&
+        pos.col === killerMoves[ply][0]!.col
+      ) {
+        combinedScore += 25000;
+      } else if (
+        killerMoves[ply][1] &&
+        pos.row === killerMoves[ply][1]!.row &&
+        pos.col === killerMoves[ply][1]!.col
+      ) {
+        combinedScore += 15000;
+      }
+    }
+
+    // History heuristic bonus
+    combinedScore += Math.min(20000, historyTable[pos.row][pos.col]);
 
     scoredMoves.push({ pos, score: combinedScore });
   }
@@ -98,7 +163,7 @@ export function getOrderedCandidates(
   // Sort descending by score
   scoredMoves.sort((a, b) => b.score - a.score);
 
-  return scoredMoves.slice(0, limit).map(m => m.pos);
+  return scoredMoves.slice(0, limit).map((m) => m.pos);
 }
 
 export interface MinimaxResult {
@@ -109,7 +174,7 @@ export interface MinimaxResult {
 }
 
 /**
- * Minimax with Alpha-Beta Pruning, Move Ordering, and Transposition Table.
+ * Minimax with Alpha-Beta Pruning, Principal Variation Search (PVS), Move Ordering, and TT.
  */
 export function minimaxAlphaBeta(
   board: BoardState,
@@ -119,36 +184,51 @@ export function minimaxAlphaBeta(
   isMaximizing: boolean,
   maxPlayer: StoneType,
   startTime: number,
-  maxDurationMs: number = 1200,
-  stats = { nodes: 0 }
+  maxDurationMs: number = 1500,
+  stats = { nodes: 0 },
+  ply: number = 0
 ): { score: number; bestMove?: Position } {
   stats.nodes++;
 
   const minPlayer: StoneType = maxPlayer === 'black' ? 'white' : 'black';
   const currentPlayer = isMaximizing ? maxPlayer : minPlayer;
 
-  // Check timeout to ensure responsive UI
+  // Check timeout to guarantee UI responsiveness
   if (Date.now() - startTime > maxDurationMs) {
     return { score: evaluateBoard(board, maxPlayer) };
   }
 
-  // Transposition lookup
+  // Transposition Table lookup
   const boardHash = getZobristHash(board);
   const cached = tt.get(boardHash);
-  if (cached && cached.depth >= depth) {
-    if (cached.flag === 'EXACT') return { score: cached.score };
-    if (cached.flag === 'LOWER') alpha = Math.max(alpha, cached.score);
-    else if (cached.flag === 'UPPER') beta = Math.min(beta, cached.score);
-    if (alpha >= beta) return { score: cached.score };
+  let ttBestMove: Position | null = null;
+
+  if (cached) {
+    if (cached.bestMove) {
+      ttBestMove = cached.bestMove;
+    }
+    if (cached.depth >= depth) {
+      if (cached.flag === 'EXACT') return { score: cached.score, bestMove: cached.bestMove };
+      if (cached.flag === 'LOWER') alpha = Math.max(alpha, cached.score);
+      else if (cached.flag === 'UPPER') beta = Math.min(beta, cached.score);
+      if (alpha >= beta) return { score: cached.score, bestMove: cached.bestMove };
+    }
   }
 
-  // Terminal leaf or depth reached
+  // Leaf node reached
   if (depth === 0) {
     const score = evaluateBoard(board, maxPlayer);
     return { score };
   }
 
-  const candidateMoves = getOrderedCandidates(board, currentPlayer, depth > 1 ? 12 : 8);
+  const candidateLimit = depth > 3 ? 14 : depth > 1 ? 10 : 8;
+  const candidateMoves = getOrderedCandidates(
+    board,
+    currentPlayer,
+    candidateLimit,
+    ttBestMove,
+    ply
+  );
 
   if (candidateMoves.length === 0) {
     return { score: 0 };
@@ -159,28 +239,65 @@ export function minimaxAlphaBeta(
   if (isMaximizing) {
     let maxEval = -Infinity;
 
-    for (const move of candidateMoves) {
+    for (let i = 0; i < candidateMoves.length; i++) {
+      const move = candidateMoves[i];
       board[move.row][move.col] = maxPlayer;
 
-      // Fast check if this move wins immediately
       const win = checkWin(board, move.row, move.col);
       let evalScore: number;
 
       if (win) {
         evalScore = PATTERN_SCORES.WIN_FIVE + depth * 10000;
       } else {
-        const res = minimaxAlphaBeta(
-          board,
-          depth - 1,
-          alpha,
-          beta,
-          false,
-          maxPlayer,
-          startTime,
-          maxDurationMs,
-          stats
-        );
-        evalScore = res.score;
+        // Principal Variation Search (PVS)
+        if (i === 0) {
+          // Full window for first move (PV candidate)
+          const res = minimaxAlphaBeta(
+            board,
+            depth - 1,
+            alpha,
+            beta,
+            false,
+            maxPlayer,
+            startTime,
+            maxDurationMs,
+            stats,
+            ply + 1
+          );
+          evalScore = res.score;
+        } else {
+          // Zero-window search for subsequent moves
+          const res = minimaxAlphaBeta(
+            board,
+            depth - 1,
+            alpha,
+            alpha + 1,
+            false,
+            maxPlayer,
+            startTime,
+            maxDurationMs,
+            stats,
+            ply + 1
+          );
+          evalScore = res.score;
+
+          // If null-window failed high, re-search with full window
+          if (evalScore > alpha && evalScore < beta) {
+            const reSearch = minimaxAlphaBeta(
+              board,
+              depth - 1,
+              evalScore,
+              beta,
+              false,
+              maxPlayer,
+              startTime,
+              maxDurationMs,
+              stats,
+              ply + 1
+            );
+            evalScore = reSearch.score;
+          }
+        }
       }
 
       board[move.row][move.col] = null; // Undo move
@@ -190,23 +307,41 @@ export function minimaxAlphaBeta(
         bestMove = move;
       }
 
-      alpha = Math.max(alpha, evalScore);
+      if (evalScore > alpha) {
+        alpha = evalScore;
+      }
+
+      // Beta Cutoff
       if (beta <= alpha) {
-        break; // Beta cutoff
+        // Store Killer Move
+        if (ply < MAX_PLY) {
+          if (
+            !killerMoves[ply][0] ||
+            killerMoves[ply][0]!.row !== move.row ||
+            killerMoves[ply][0]!.col !== move.col
+          ) {
+            killerMoves[ply][1] = killerMoves[ply][0];
+            killerMoves[ply][0] = move;
+          }
+        }
+        // Increment history heuristic
+        historyTable[move.row][move.col] += depth * depth * 10;
+        break;
       }
     }
 
-    // Cache transposition
+    // Save to Transposition Table
     let flag: 'EXACT' | 'LOWER' | 'UPPER' = 'EXACT';
     if (maxEval <= alpha) flag = 'UPPER';
     else if (maxEval >= beta) flag = 'LOWER';
-    tt.set(boardHash, { depth, score: maxEval, flag });
+    tt.set(boardHash, { depth, score: maxEval, flag, bestMove });
 
     return { score: maxEval, bestMove };
   } else {
     let minEval = Infinity;
 
-    for (const move of candidateMoves) {
+    for (let i = 0; i < candidateMoves.length; i++) {
+      const move = candidateMoves[i];
       board[move.row][move.col] = minPlayer;
 
       const win = checkWin(board, move.row, move.col);
@@ -215,18 +350,51 @@ export function minimaxAlphaBeta(
       if (win) {
         evalScore = -(PATTERN_SCORES.WIN_FIVE + depth * 10000);
       } else {
-        const res = minimaxAlphaBeta(
-          board,
-          depth - 1,
-          alpha,
-          beta,
-          true,
-          maxPlayer,
-          startTime,
-          maxDurationMs,
-          stats
-        );
-        evalScore = res.score;
+        if (i === 0) {
+          const res = minimaxAlphaBeta(
+            board,
+            depth - 1,
+            alpha,
+            beta,
+            true,
+            maxPlayer,
+            startTime,
+            maxDurationMs,
+            stats,
+            ply + 1
+          );
+          evalScore = res.score;
+        } else {
+          const res = minimaxAlphaBeta(
+            board,
+            depth - 1,
+            beta - 1,
+            beta,
+            true,
+            maxPlayer,
+            startTime,
+            maxDurationMs,
+            stats,
+            ply + 1
+          );
+          evalScore = res.score;
+
+          if (evalScore > alpha && evalScore < beta) {
+            const reSearch = minimaxAlphaBeta(
+              board,
+              depth - 1,
+              alpha,
+              evalScore,
+              true,
+              maxPlayer,
+              startTime,
+              maxDurationMs,
+              stats,
+              ply + 1
+            );
+            evalScore = reSearch.score;
+          }
+        }
       }
 
       board[move.row][move.col] = null; // Undo move
@@ -236,17 +404,87 @@ export function minimaxAlphaBeta(
         bestMove = move;
       }
 
-      beta = Math.min(beta, evalScore);
+      if (evalScore < beta) {
+        beta = evalScore;
+      }
+
+      // Alpha Cutoff
       if (beta <= alpha) {
-        break; // Alpha cutoff
+        if (ply < MAX_PLY) {
+          if (
+            !killerMoves[ply][0] ||
+            killerMoves[ply][0]!.row !== move.row ||
+            killerMoves[ply][0]!.col !== move.col
+          ) {
+            killerMoves[ply][1] = killerMoves[ply][0];
+            killerMoves[ply][0] = move;
+          }
+        }
+        historyTable[move.row][move.col] += depth * depth * 10;
+        break;
       }
     }
 
     let flag: 'EXACT' | 'LOWER' | 'UPPER' = 'EXACT';
     if (minEval <= alpha) flag = 'UPPER';
     else if (minEval >= beta) flag = 'LOWER';
-    tt.set(boardHash, { depth, score: minEval, flag });
+    tt.set(boardHash, { depth, score: minEval, flag, bestMove });
 
     return { score: minEval, bestMove };
   }
+}
+
+/**
+ * Iterative Deepening Minimax Engine with time budget management.
+ */
+export function iterativeDeepeningSearch(
+  board: BoardState,
+  botPlayer: StoneType,
+  targetDepth: number,
+  maxTimeMs: number
+): MinimaxResult {
+  const startTime = Date.now();
+  resetSearchTables();
+
+  const stats = { nodes: 0 };
+  let bestMove: Position = { row: 7, col: 7 };
+  let bestScore = 0;
+  let completedDepth = 1;
+
+  for (let d = 1; d <= targetDepth; d++) {
+    // If we've used more than 70% of time budget, don't start the next depth iteration
+    if (d > 1 && Date.now() - startTime > maxTimeMs * 0.7) {
+      break;
+    }
+
+    const result = minimaxAlphaBeta(
+      board,
+      d,
+      -Infinity,
+      Infinity,
+      true,
+      botPlayer,
+      startTime,
+      maxTimeMs,
+      stats
+    );
+
+    if (result.bestMove) {
+      bestMove = result.bestMove;
+      bestScore = result.score;
+      completedDepth = d;
+    }
+
+    // If an undeniable win/loss is detected, terminate early
+    if (Math.abs(bestScore) >= PATTERN_SCORES.WIN_FIVE) {
+      break;
+    }
+  }
+
+  return {
+    bestMove,
+    score: bestScore,
+    nodesEvaluated: stats.nodes,
+    depth: completedDepth,
+  };
 }

@@ -14,9 +14,26 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
   currentDifficulty,
   onResetStats,
 }) => {
-  const currentDiffStats = stats[currentDifficulty];
+  const currentDiffStats = stats[currentDifficulty] || { wins: 0, losses: 0, draws: 0 };
   const totalGames = currentDiffStats.wins + currentDiffStats.losses + currentDiffStats.draws;
   const winRate = totalGames > 0 ? Math.round((currentDiffStats.wins / totalGames) * 100) : 0;
+
+  const getDifficultyBadgeStyle = () => {
+    switch (currentDifficulty) {
+      case 'easy':
+        return 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60';
+      case 'medium':
+        return 'bg-blue-950/80 text-blue-300 border-blue-700/60';
+      case 'hard':
+        return 'bg-purple-950/80 text-purple-300 border-purple-700/60';
+      case 'expert':
+        return 'bg-amber-950/80 text-amber-300 border-amber-700/60';
+      case 'god':
+        return 'bg-gradient-to-r from-rose-900 to-amber-900 text-rose-200 border-rose-600/70 shadow-sm shadow-rose-900/40 font-bold';
+      default:
+        return 'bg-slate-800 text-amber-400 border-slate-700';
+    }
+  };
 
   return (
     <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-4 sm:p-5 flex flex-col gap-4">
@@ -26,7 +43,9 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
           <Trophy className="w-4 h-4 text-amber-400" />
           <h3 className="text-sm font-bold text-slate-200">Session Scoreboard</h3>
         </div>
-        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-amber-400 capitalize border border-slate-700">
+        <span
+          className={`text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize border transition-all ${getDifficultyBadgeStyle()}`}
+        >
           {currentDifficulty} Mode
         </span>
       </div>

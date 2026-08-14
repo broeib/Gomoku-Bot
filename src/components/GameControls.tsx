@@ -124,7 +124,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
               AI Difficulty
             </label>
-            <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <div className="grid grid-cols-5 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
               <button
                 type="button"
                 id="diff-easy"
@@ -132,11 +132,12 @@ export const GameControls: React.FC<GameControlsProps> = ({
                   soundManager.playClickSound();
                   onSelectDifficulty('easy');
                 }}
-                className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
                   difficulty === 'easy'
                     ? 'bg-emerald-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
+                title="Easy Mode (Rating ~800)"
               >
                 <span>Easy</span>
               </button>
@@ -147,11 +148,12 @@ export const GameControls: React.FC<GameControlsProps> = ({
                   soundManager.playClickSound();
                   onSelectDifficulty('medium');
                 }}
-                className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
                   difficulty === 'medium'
                     ? 'bg-blue-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
+                title="Medium Mode (Rating ~1400)"
               >
                 <span>Medium</span>
               </button>
@@ -162,14 +164,49 @@ export const GameControls: React.FC<GameControlsProps> = ({
                   soundManager.playClickSound();
                   onSelectDifficulty('hard');
                 }}
-                className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
                   difficulty === 'hard'
                     ? 'bg-purple-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
+                title="Hard Mode (Rating ~1900)"
               >
-                <Zap className="w-3 h-3" />
+                <Zap className="w-3 h-3 hidden sm:inline" />
                 <span>Hard</span>
+              </button>
+              <button
+                type="button"
+                id="diff-expert"
+                onClick={() => {
+                  soundManager.playClickSound();
+                  onSelectDifficulty('expert');
+                }}
+                className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                  difficulty === 'expert'
+                    ? 'bg-amber-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Expert Mode (Rating ~2400) - Deep Minimax + VCF Tactical Engine"
+              >
+                <Sparkles className="w-3 h-3 hidden sm:inline" />
+                <span>Expert</span>
+              </button>
+              <button
+                type="button"
+                id="diff-god"
+                onClick={() => {
+                  soundManager.playClickSound();
+                  onSelectDifficulty('god');
+                }}
+                className={`py-1.5 px-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                  difficulty === 'god'
+                    ? 'bg-gradient-to-r from-rose-600 to-amber-500 text-white shadow-lg shadow-rose-900/30'
+                    : 'text-rose-400 hover:text-rose-200'
+                }`}
+                title="God Mode (Rating 2800+) - Championship AI Engine with Deep VCF/VCT + Opening Book"
+              >
+                <Cpu className="w-3 h-3 hidden sm:inline" />
+                <span>God</span>
               </button>
             </div>
           </div>

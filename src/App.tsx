@@ -37,6 +37,8 @@ const INITIAL_STATS: GameStats = {
   easy: { wins: 0, losses: 0, draws: 0 },
   medium: { wins: 0, losses: 0, draws: 0 },
   hard: { wins: 0, losses: 0, draws: 0 },
+  expert: { wins: 0, losses: 0, draws: 0 },
+  god: { wins: 0, losses: 0, draws: 0 },
   pvp: { blackWins: 0, whiteWins: 0, draws: 0 },
   currentStreak: 0,
   bestStreak: 0,
@@ -78,12 +80,21 @@ export function App() {
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
   const [isWinnerModalOpen, setIsWinnerModalOpen] = useState<boolean>(false);
 
-  // Statistics with persistent localStorage
+  // Statistics with persistent localStorage & safe migration
   const [stats, setStats] = useState<GameStats>(() => {
     const saved = localStorage.getItem('gomoku_game_stats');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return {
+          ...INITIAL_STATS,
+          ...parsed,
+          easy: { ...INITIAL_STATS.easy, ...parsed.easy },
+          medium: { ...INITIAL_STATS.medium, ...parsed.medium },
+          hard: { ...INITIAL_STATS.hard, ...parsed.hard },
+          expert: { ...INITIAL_STATS.expert, ...parsed.expert },
+          god: { ...INITIAL_STATS.god, ...parsed.god },
+        };
       } catch {}
     }
     return INITIAL_STATS;

@@ -166,10 +166,57 @@ describe('Gomoku AI & Minimax Engine', () => {
       expect(res.depth).toBeGreaterThanOrEqual(1);
     });
 
-    it('Hard Bot should block opponent threat on empty board opening with center', async () => {
+    it('Expert Bot should seize open win immediately', async () => {
       const board = createEmptyBoard();
-      const res = await computeAIMove(board, 'hard', 'black');
+      board[7][3] = 'white';
+      board[7][4] = 'white';
+      board[7][5] = 'white';
+      board[7][6] = 'white';
+
+      const res = await computeAIMove(board, 'expert', 'white');
+      expect(res.bestMove.row).toBe(7);
+      expect([2, 7]).toContain(res.bestMove.col);
+      expect(res.depth).toBeGreaterThanOrEqual(1);
+    });
+
+    it('God Bot should seize open win immediately', async () => {
+      const board = createEmptyBoard();
+      board[7][3] = 'black';
+      board[7][4] = 'black';
+      board[7][5] = 'black';
+      board[7][6] = 'black';
+
+      const res = await computeAIMove(board, 'god', 'black');
+      expect(res.bestMove.row).toBe(7);
+      expect([2, 7]).toContain(res.bestMove.col);
+    });
+
+    it('God Bot should play book move at center on empty board', async () => {
+      const board = createEmptyBoard();
+      const res = await computeAIMove(board, 'god', 'black');
       expect(res.bestMove).toEqual({ row: 7, col: 7 });
+      expect(res.explanation).toContain('Tengen');
+    });
+
+    it('God Bot should play opening book reply against Black center', async () => {
+      const board = createEmptyBoard();
+      board[7][7] = 'black';
+      const res = await computeAIMove(board, 'god', 'white');
+      expect(res.bestMove).toEqual({ row: 7, col: 8 });
+    });
+  });
+
+  describe('Tactical VCF & VCT Engines', () => {
+    it('VCF solver should detect forced continuous four sequence', async () => {
+      const board = createEmptyBoard();
+      // Setup Black with 3 stones on horizontal and vertical ready for consecutive four attack
+      board[7][5] = 'black';
+      board[7][6] = 'black';
+      board[7][7] = 'black'; // Threat at (7,4) or (7,8) creates 4
+
+      const res = await computeAIMove(board, 'god', 'black');
+      expect(res.bestMove).toBeDefined();
+      expect(board[res.bestMove.row][res.bestMove.col]).toBeNull();
     });
   });
 

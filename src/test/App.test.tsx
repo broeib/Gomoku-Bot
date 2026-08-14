@@ -208,12 +208,20 @@ describe('Gomoku App Integration Tests', () => {
     const easyBtn = screen.getByRole('button', { name: /Easy/i });
     const mediumBtn = screen.getByRole('button', { name: /Medium/i });
     const hardBtn = screen.getByRole('button', { name: /Hard/i });
+    const expertBtn = screen.getByRole('button', { name: /Expert/i });
+    const godBtn = screen.getByRole('button', { name: /God/i });
 
     fireEvent.click(easyBtn);
     expect(screen.getByText(/easy mode/i)).toBeInTheDocument();
 
     fireEvent.click(hardBtn);
     expect(screen.getByText(/hard mode/i)).toBeInTheDocument();
+
+    fireEvent.click(expertBtn);
+    expect(screen.getByText(/expert mode/i)).toBeInTheDocument();
+
+    fireEvent.click(godBtn);
+    expect(screen.getByText(/god mode/i)).toBeInTheDocument();
 
     fireEvent.click(mediumBtn);
     expect(screen.getByText(/medium mode/i)).toBeInTheDocument();

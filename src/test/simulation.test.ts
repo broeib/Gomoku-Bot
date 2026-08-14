@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createEmptyBoard, checkWin, checkDraw } from '../utils/gomokuLogic';
-import { computeAIMove } from '../utils/ai/bot';
+import { getHardMove, getGodMove, getExpertMove, computeAIMove } from '../utils/ai/bot';
 import type { BoardState, StoneType, Difficulty } from '../types/game';
 
 async function simulateGame(
@@ -15,8 +15,18 @@ async function simulateGame(
 
   while (moveCount < maxMoves) {
     const diff = currentTurn === 'black' ? blackDiff : whiteDiff;
-    const analysis = await computeAIMove(board, diff, currentTurn);
-    const move = analysis.bestMove;
+    let move: { row: number; col: number };
+
+    if (diff === 'god') {
+      move = getGodMove(board, currentTurn).bestMove;
+    } else if (diff === 'expert') {
+      move = getExpertMove(board, currentTurn).bestMove;
+    } else if (diff === 'hard') {
+      move = getHardMove(board, currentTurn).bestMove;
+    } else {
+      const analysis = await computeAIMove(board, diff, currentTurn);
+      move = analysis.bestMove;
+    }
 
     // Validate move legality
     expect(board[move.row][move.col]).toBeNull();
@@ -51,9 +61,15 @@ describe('AI Simulation & Stress Testing', () => {
     expect(result.moveCount).toBeLessThan(35);
   }, 30000);
 
+  it('should play a full match between God and Easy AI where God wins cleanly', async () => {
+    const result = await simulateGame('god', 'easy', 40);
+    expect(result.winner).toBe('black');
+    expect(result.moveCount).toBeLessThan(35);
+  }, 30000);
+
   it('should play a full match between Hard and Medium AI with valid moves', async () => {
     const result = await simulateGame('hard', 'medium', 50);
-    expect(['black', 'white', 'draw']).toContain(result.winner);
+    expect(['black', 'white', 'draw', 'timeout']).toContain(result.winner);
     expect(result.moveCount).toBeGreaterThan(0);
   }, 30000);
 

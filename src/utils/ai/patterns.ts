@@ -217,3 +217,189 @@ export function evaluatePoint(
 
   return totalScore;
 }
+
+export interface FourThreat {
+  move: { row: number; col: number };
+  threatPoints: { row: number; col: number }[]; // Points where attacker will win next turn
+  isOpenFour: boolean;
+}
+
+/**
+ * Returns all moves for 'player' that immediately create a 5-in-a-row win.
+ */
+export function getImmediateWinMoves(
+  board: BoardState,
+  player: StoneType,
+  candidates?: { row: number; col: number }[]
+): { row: number; col: number }[] {
+  const moves: { row: number; col: number }[] = [];
+  const searchSpace = candidates || [];
+  
+  if (searchSpace.length === 0) {
+    for (let r = 0; r < 15; r++) {
+      for (let c = 0; c < 15; c++) {
+        if (board[r][c] === null) {
+          if (evaluatePoint(board, r, c, player) >= PATTERN_SCORES.WIN_FIVE) {
+            moves.push({ row: r, col: c });
+          }
+        }
+      }
+    }
+  } else {
+    for (const pos of searchSpace) {
+      if (board[pos.row][pos.col] === null) {
+        if (evaluatePoint(board, pos.row, pos.col, player) >= PATTERN_SCORES.WIN_FIVE) {
+          moves.push(pos);
+        }
+      }
+    }
+  }
+  return moves;
+}
+
+/**
+ * Finds all four-threat forming moves (creating Open 4 or Blocked 4) and their defense points.
+ */
+export function getFourThreats(
+  board: BoardState,
+  player: StoneType,
+  candidates: { row: number; col: number }[]
+): FourThreat[] {
+  const threats: FourThreat[] = [];
+
+  for (const pos of candidates) {
+    if (board[pos.row][pos.col] !== null) continue;
+
+    // Temporarily place stone
+    board[pos.row][pos.col] = player;
+
+    const threatPointsMap = new Map<string, { row: number; col: number }>();
+    let isOpenFour = false;
+
+    // Scan all 4 directions from pos
+    for (const [dr, dc] of DIRECTIONS) {
+      // Check 5-cell windows along this direction
+      for (let offset = -4; offset <= 0; offset++) {
+        let count = 0;
+        let emptyPos: { row: number; col: number } | null = null;
+        let valid = true;
+
+        for (let k = 0; k < 5; k++) {
+          const r = pos.row + (offset + k) * dr;
+          const c = pos.col + (offset + k) * dc;
+
+          if (!isValidPos(r, c)) {
+            valid = false;
+            break;
+          }
+
+          const cell = board[r][c];
+          if (cell === player) {
+            count++;
+          } else if (cell === null) {
+            if (emptyPos === null) {
+              emptyPos = { row: r, col: c };
+            } else {
+              valid = false;
+              break;
+            }
+          } else {
+            valid = false;
+            break;
+          }
+        }
+
+        if (valid && count === 4 && emptyPos !== null) {
+          const key = `${emptyPos.row},${emptyPos.col}`;
+          threatPointsMap.set(key, emptyPos);
+        }
+      }
+
+      // Check if open four in this direction
+      const dirScore = evaluatePointDirection(board, pos.row, pos.col, dr, dc, player);
+      if (dirScore >= PATTERN_SCORES.OPEN_FOUR) {
+        isOpenFour = true;
+      }
+    }
+
+    // Undo move
+    board[pos.row][pos.col] = null;
+
+    if (threatPointsMap.size > 0) {
+      threats.push({
+        move: pos,
+        threatPoints: Array.from(threatPointsMap.values()),
+        isOpenFour: isOpenFour || threatPointsMap.size >= 2,
+      });
+    }
+  }
+
+  return threats;
+}
+
+export interface ThreeThreat {
+  move: { row: number; col: number };
+  defensePoints: { row: number; col: number }[];
+  isDoubleThree: boolean;
+}
+
+/**
+ * Finds all Open Three forming moves and their defensive blocking points.
+ */
+export function getThreeThreats(
+  board: BoardState,
+  player: StoneType,
+  candidates: { row: number; col: number }[]
+): ThreeThreat[] {
+  const threats: ThreeThreat[] = [];
+
+  for (const pos of candidates) {
+    if (board[pos.row][pos.col] !== null) continue;
+
+    board[pos.row][pos.col] = player;
+
+    let openThreeCount = 0;
+    const defenseMap = new Map<string, { row: number; col: number }>();
+
+    for (const [dr, dc] of DIRECTIONS) {
+      const dirScore = evaluatePointDirection(board, pos.row, pos.col, dr, dc, player);
+      if (dirScore >= PATTERN_SCORES.OPEN_THREE) {
+        openThreeCount++;
+
+        // Find the ends of this open three
+        let r = pos.row + dr;
+        let c = pos.col + dc;
+        while (isValidPos(r, c) && board[r][c] === player) {
+          r += dr;
+          c += dc;
+        }
+        if (isValidPos(r, c) && board[r][c] === null) {
+          defenseMap.set(`${r},${c}`, { row: r, col: c });
+        }
+
+        r = pos.row - dr;
+        c = pos.col - dc;
+        while (isValidPos(r, c) && board[r][c] === player) {
+          r -= dr;
+          c -= dc;
+        }
+        if (isValidPos(r, c) && board[r][c] === null) {
+          defenseMap.set(`${r},${c}`, { row: r, col: c });
+        }
+      }
+    }
+
+    board[pos.row][pos.col] = null;
+
+    if (openThreeCount > 0) {
+      threats.push({
+        move: pos,
+        defensePoints: Array.from(defenseMap.values()),
+        isDoubleThree: openThreeCount >= 2,
+      });
+    }
+  }
+
+  return threats;
+}
+

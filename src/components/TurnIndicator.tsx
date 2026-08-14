@@ -26,7 +26,10 @@ export const TurnIndicator: React.FC<TurnIndicatorProps> = ({
 
   const getPlayerLabel = (stone: StoneType) => {
     if (isPvE) {
-      return stone === playerColor ? 'You' : `Bot (${difficulty.toUpperCase()})`;
+      if (stone === playerColor) return 'You';
+      if (difficulty === 'god') return 'God AI (Grandmaster)';
+      if (difficulty === 'expert') return 'Expert AI (Master)';
+      return `Bot (${difficulty.toUpperCase()})`;
     }
     if (isEvE) {
       return stone === 'black' ? 'Bot 1 (Black)' : 'Bot 2 (White)';
