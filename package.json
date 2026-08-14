@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "deploy": "npm run build && cp dist/index.html dist/200.html && npx surge dist"
+    "deploy": "npm run build && cp dist/index.html dist/200.html && npx surge dist --domain gomoku-master-ai.surge.sh"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",
