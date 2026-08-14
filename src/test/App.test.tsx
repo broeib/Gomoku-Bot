@@ -7,12 +7,29 @@ describe('Gomoku App Integration Tests', () => {
     localStorage.clear();
   });
 
-  it('renders application header, board, and controls correctly', () => {
+  it('renders application header, board, eval bar, and controls correctly', () => {
     render(<App />);
     expect(screen.getByRole('heading', { name: /Gomoku Master/i })).toBeInTheDocument();
     expect(screen.getByText(/Session Scoreboard/i)).toBeInTheDocument();
     expect(screen.getByText(/Move History/i)).toBeInTheDocument();
+    expect(screen.getByTestId('eval-bar')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /New Game/i })).toBeInTheDocument();
+  });
+
+  it('allows toggling the evaluation bar visibility on and off', () => {
+    render(<App />);
+    expect(screen.getByTestId('eval-bar')).toBeInTheDocument();
+
+    // Click toggle eval bar button in navbar
+    const toggleEvalBtn = screen.getByRole('button', { name: /Eval/i });
+    fireEvent.click(toggleEvalBtn);
+
+    // EVAL bar should be hidden
+    expect(screen.queryByTestId('eval-bar')).not.toBeInTheDocument();
+
+    // Click again to show
+    fireEvent.click(toggleEvalBtn);
+    expect(screen.getByTestId('eval-bar')).toBeInTheDocument();
   });
 
   it('automatically responds with AI move in PvE mode when human places a stone', async () => {
@@ -65,6 +82,38 @@ describe('Gomoku App Integration Tests', () => {
     await waitFor(() => {
       expect(screen.getByText('I8')).toBeInTheDocument();
     });
+  });
+
+  it('allows entering and navigating Game Review mode after moves are played', async () => {
+    render(<App />);
+
+    // Switch to PvP mode and make 2 moves
+    fireEvent.click(screen.getByRole('button', { name: /2P/i }));
+    fireEvent.click(document.getElementById('cell-7-7')!);
+    fireEvent.click(document.getElementById('cell-7-8')!);
+
+    // Click Review button
+    const reviewBtn = screen.getByRole('button', { name: /Review/i });
+    expect(reviewBtn).not.toBeDisabled();
+    fireEvent.click(reviewBtn);
+
+    // Game Review panel should be open
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Game Review/i })).toBeInTheDocument();
+      expect(screen.getByText(/Tactical Analysis/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Accuracy/i).length).toBeGreaterThan(0);
+    });
+
+    // Step forward in review
+    const nextStepBtn = screen.getByTitle(/Next Move/i);
+    fireEvent.click(nextStepBtn);
+
+    // Exit review mode
+    const closeReviewBtn = screen.getByTitle(/Exit Review Mode/i);
+    fireEvent.click(closeReviewBtn);
+
+    // Move history should be restored
+    expect(screen.queryByText(/Tactical Analysis/i)).not.toBeInTheDocument();
   });
 
   it('handles Undo and Redo operations correctly', async () => {

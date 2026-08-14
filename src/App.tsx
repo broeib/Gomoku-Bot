@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type {
   BoardState,
   BoardTheme,
@@ -10,6 +10,7 @@ import type {
   Position,
   StoneType,
   WinningInfo,
+  GameReviewSummary,
 } from './types/game';
 import {
   checkDraw,
@@ -18,6 +19,8 @@ import {
   cloneBoard,
 } from './utils/gomokuLogic';
 import { computeAIMove, getHint } from './utils/ai/bot';
+import { getBoardEvaluation } from './utils/ai/evaluator';
+import { generateGameReview } from './utils/ai/reviewer';
 import { soundManager } from './utils/audio';
 import { Navbar } from './components/Navbar';
 import { Board } from './components/Board';
@@ -27,6 +30,8 @@ import { Scoreboard } from './components/Scoreboard';
 import { MoveHistory } from './components/MoveHistory';
 import { WinnerModal } from './components/WinnerModal';
 import { RulesModal } from './components/RulesModal';
+import { EvalBar } from './components/EvalBar';
+import { GameReviewPanel } from './components/GameReviewPanel';
 
 const INITIAL_STATS: GameStats = {
   easy: { wins: 0, losses: 0, draws: 0 },
@@ -53,12 +58,21 @@ export function App() {
   const [playerColor, setPlayerColor] = useState<StoneType>('black');
   const [theme, setTheme] = useState<BoardTheme>('kaya');
   const [showMoveNumbers, setShowMoveNumbers] = useState<boolean>(false);
+  const [showEvalBar, setShowEvalBar] = useState<boolean>(() => {
+    const saved = localStorage.getItem('gomoku_show_eval_bar');
+    return saved !== null ? saved === 'true' : true;
+  });
   const [isMuted, setIsMuted] = useState<boolean>(soundManager.getIsMuted());
 
   // AI & Tactical State
   const [isAiThinking, setIsAiThinking] = useState<boolean>(false);
   const [hintPos, setHintPos] = useState<Position | null>(null);
   const [aiExplanation, setAiExplanation] = useState<string | null>(null);
+
+  // Chess.com-style Game Review State
+  const [isReviewMode, setIsReviewMode] = useState<boolean>(false);
+  const [reviewSummary, setReviewSummary] = useState<GameReviewSummary | null>(null);
+  const [reviewStepIndex, setReviewStepIndex] = useState<number>(0);
 
   // Modals
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
@@ -84,6 +98,28 @@ export function App() {
   useEffect(() => {
     localStorage.setItem('gomoku_game_stats', JSON.stringify(stats));
   }, [stats]);
+
+  // Toggle Eval Bar & Persist
+  const handleToggleEvalBar = useCallback(() => {
+    setShowEvalBar((prev) => {
+      const next = !prev;
+      localStorage.setItem('gomoku_show_eval_bar', String(next));
+      return next;
+    });
+  }, []);
+
+  // Live board evaluation calculation
+  const liveEvaluation = useMemo(() => {
+    if (isReviewMode && reviewSummary && reviewSummary.reviewedMoves[reviewStepIndex]) {
+      const rm = reviewSummary.reviewedMoves[reviewStepIndex];
+      return {
+        rawScore: rm.evalAfter,
+        percentage: rm.normalizedAdvantage,
+        displayText: rm.evalText,
+      };
+    }
+    return getBoardEvaluation(board);
+  }, [board, isReviewMode, reviewSummary, reviewStepIndex]);
 
   // Handle Game End & Stats update
   const handleGameEnd = useCallback(
@@ -178,6 +214,7 @@ export function App() {
   const handleCellClick = useCallback(
     (row: number, col: number) => {
       if (
+        isReviewMode ||
         gameStatus !== 'playing' ||
         board[row][col] !== null ||
         isAiThinking
@@ -197,12 +234,12 @@ export function App() {
 
       makeMove(row, col, currentTurn);
     },
-    [gameStatus, board, currentTurn, gameMode, playerColor, isAiThinking, makeMove]
+    [isReviewMode, gameStatus, board, currentTurn, gameMode, playerColor, isAiThinking, makeMove]
   );
 
   // AI Turn Handler
   useEffect(() => {
-    if (gameStatus !== 'playing') {
+    if (isReviewMode || gameStatus !== 'playing') {
       setIsAiThinking(false);
       return;
     }
@@ -215,7 +252,6 @@ export function App() {
       setIsAiThinking(true);
 
       computeAIMove(board, difficulty, currentTurn).then((analysis) => {
-        // Only apply move if this request is still current and game is playing
         if (aiRequestIdRef.current === requestId && gameStatusRef.current === 'playing') {
           setIsAiThinking(false);
           makeMove(
@@ -229,7 +265,7 @@ export function App() {
     } else {
       setIsAiThinking(false);
     }
-  }, [board, currentTurn, gameMode, playerColor, difficulty, gameStatus, makeMove]);
+  }, [board, currentTurn, gameMode, playerColor, difficulty, gameStatus, isReviewMode, makeMove]);
 
   // Start New Game
   const handleNewGame = useCallback(() => {
@@ -245,23 +281,76 @@ export function App() {
     setAiExplanation(null);
     setIsAiThinking(false);
     setIsWinnerModalOpen(false);
+    setIsReviewMode(false);
+    setReviewSummary(null);
   }, []);
+
+  // Launch Chess.com-style Game Review
+  const handleStartReview = useCallback(() => {
+    if (moves.length === 0) return;
+    const summary = generateGameReview(moves);
+    setReviewSummary(summary);
+    setIsReviewMode(true);
+    setReviewStepIndex(0);
+
+    // Reconstruct board at move 0
+    const stepBoard = createEmptyBoard();
+    if (moves.length > 0) {
+      stepBoard[moves[0].row][moves[0].col] = moves[0].player;
+    }
+    setBoard(stepBoard);
+    setIsWinnerModalOpen(false);
+  }, [moves]);
+
+  // Step through Game Review
+  const handleReviewStepChange = useCallback(
+    (stepIndex: number) => {
+      if (!reviewSummary || stepIndex < 0 || stepIndex >= reviewSummary.reviewedMoves.length) {
+        return;
+      }
+      setReviewStepIndex(stepIndex);
+      const subMoves = moves.slice(0, stepIndex + 1);
+      const stepBoard = createEmptyBoard();
+      subMoves.forEach((m) => {
+        stepBoard[m.row][m.col] = m.player;
+      });
+      setBoard(stepBoard);
+
+      const last = subMoves[subMoves.length - 1];
+      const win = checkWin(stepBoard, last.row, last.col);
+      setWinningInfo(win);
+    },
+    [reviewSummary, moves]
+  );
+
+  // Close Game Review and restore full board
+  const handleCloseReview = useCallback(() => {
+    setIsReviewMode(false);
+    setReviewSummary(null);
+    const restoredBoard = createEmptyBoard();
+    moves.forEach((m) => {
+      restoredBoard[m.row][m.col] = m.player;
+    });
+    setBoard(restoredBoard);
+    if (moves.length > 0) {
+      const last = moves[moves.length - 1];
+      setWinningInfo(checkWin(restoredBoard, last.row, last.col));
+    }
+  }, [moves]);
 
   // Undo Move
   const handleUndo = useCallback(() => {
-    if (moves.length === 0 || isAiThinking || gameStatus !== 'playing') return;
+    if (moves.length === 0 || isAiThinking || gameStatus !== 'playing' || isReviewMode) return;
 
     aiRequestIdRef.current++;
     let targetCount = moves.length;
     let popped: Move[] = [];
 
     if (gameMode === 'pve') {
-      // In PvE, undo both AI and player moves so player gets their turn back
       const undoAmount = moves.length >= 2 ? 2 : 1;
       targetCount = moves.length - undoAmount;
       popped = moves.slice(targetCount);
     } else {
-      // In PvP, undo 1 move
       targetCount = moves.length - 1;
       popped = moves.slice(targetCount);
     }
@@ -281,11 +370,11 @@ export function App() {
     setAiExplanation(null);
     setWinningInfo(null);
     setIsAiThinking(false);
-  }, [moves, isAiThinking, gameStatus, gameMode]);
+  }, [moves, isAiThinking, gameStatus, isReviewMode, gameMode]);
 
   // Redo Move
   const handleRedo = useCallback(() => {
-    if (undoneMoves.length === 0 || isAiThinking || gameStatus !== 'playing') return;
+    if (undoneMoves.length === 0 || isAiThinking || gameStatus !== 'playing' || isReviewMode) return;
 
     aiRequestIdRef.current++;
     let redoAmount = 1;
@@ -310,37 +399,36 @@ export function App() {
     setHintPos(null);
     setIsAiThinking(false);
 
-    // Check if redone move produced a win
     const lastM = toApply[toApply.length - 1];
     const win = checkWin(newBoard, lastM.row, lastM.col);
     if (win) {
       handleGameEnd(lastM.player === 'black' ? 'black_win' : 'white_win', win);
     }
-  }, [undoneMoves, isAiThinking, gameStatus, gameMode, board, moves, handleGameEnd]);
+  }, [undoneMoves, isAiThinking, gameStatus, isReviewMode, gameMode, board, moves, handleGameEnd]);
 
   // Get AI Hint
   const handleGetHint = useCallback(() => {
-    if (isAiThinking || gameStatus !== 'playing') return;
+    if (isAiThinking || gameStatus !== 'playing' || isReviewMode) return;
 
     const analysis = getHint(board, currentTurn);
     setHintPos(analysis.bestMove);
     setAiExplanation(`Hint: ${analysis.explanation}`);
-  }, [board, currentTurn, isAiThinking, gameStatus]);
+  }, [board, currentTurn, isAiThinking, gameStatus, isReviewMode]);
 
   // Resign Match
   const handleResign = useCallback(() => {
-    if (gameStatus !== 'playing') return;
+    if (gameStatus !== 'playing' || isReviewMode) return;
     if (window.confirm('Are you sure you want to resign this match?')) {
       aiRequestIdRef.current++;
       const winner: StoneType = currentTurn === 'black' ? 'white' : 'black';
       handleGameEnd(winner === 'black' ? 'black_win' : 'white_win', null);
     }
-  }, [gameStatus, currentTurn, handleGameEnd]);
+  }, [gameStatus, isReviewMode, currentTurn, handleGameEnd]);
 
   // Jump to specific move (Replay)
   const handleJumpToMove = useCallback(
     (index: number) => {
-      if (index < 0 || index >= moves.length) return;
+      if (index < 0 || index >= moves.length || isReviewMode) return;
 
       aiRequestIdRef.current++;
       const subMoves = moves.slice(0, index + 1);
@@ -354,18 +442,16 @@ export function App() {
       setCurrentTurn((index + 1) % 2 === 0 ? 'black' : 'white');
       setIsAiThinking(false);
 
-      // Check win for historical step
       const last = subMoves[subMoves.length - 1];
       const win = checkWin(newBoard, last.row, last.col);
       setWinningInfo(win);
     },
-    [moves]
+    [moves, isReviewMode]
   );
 
   // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
       if (
         document.activeElement?.tagName === 'INPUT' ||
         document.activeElement?.tagName === 'TEXTAREA'
@@ -386,6 +472,9 @@ export function App() {
       } else if (e.key.toLowerCase() === 'h') {
         e.preventDefault();
         handleGetHint();
+      } else if (e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        handleToggleEvalBar();
       } else if (e.key.toLowerCase() === 'n') {
         e.preventDefault();
         handleNewGame();
@@ -398,9 +487,16 @@ export function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, handleGetHint, handleNewGame]);
+  }, [handleUndo, handleRedo, handleGetHint, handleToggleEvalBar, handleNewGame]);
 
-  const lastPlacedMove = moves.length > 0 ? moves[moves.length - 1] : null;
+  const lastPlacedMove = isReviewMode
+    ? reviewSummary?.reviewedMoves[reviewStepIndex]?.move || null
+    : moves.length > 0
+    ? moves[moves.length - 1]
+    : null;
+
+  const currentReviewedMove =
+    isReviewMode && reviewSummary ? reviewSummary.reviewedMoves[reviewStepIndex] : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
@@ -415,6 +511,8 @@ export function App() {
         }}
         showMoveNumbers={showMoveNumbers}
         onToggleMoveNumbers={() => setShowMoveNumbers(!showMoveNumbers)}
+        showEvalBar={showEvalBar}
+        onToggleEvalBar={handleToggleEvalBar}
         onOpenRules={() => setIsRulesOpen(true)}
       />
 
@@ -429,7 +527,7 @@ export function App() {
             playerColor={playerColor}
             difficulty={difficulty}
             isAiThinking={isAiThinking}
-            moveCount={moves.length}
+            moveCount={isReviewMode ? reviewStepIndex : moves.length}
           />
         </div>
 
@@ -447,25 +545,46 @@ export function App() {
             />
           </div>
 
-          {/* Center: Interactive Board & Controls (Desktop 6 cols) */}
+          {/* Center: Interactive Board, Eval Bar & Controls (Desktop 6 cols) */}
           <div className="lg:col-span-6 order-1 lg:order-2 flex flex-col items-center gap-4">
-            <Board
-              board={board}
-              onCellClick={handleCellClick}
-              disabled={
-                gameStatus !== 'playing' ||
-                isAiThinking ||
-                (gameMode === 'pve' && currentTurn !== playerColor) ||
-                gameMode === 'eve'
-              }
-              currentTurn={currentTurn}
-              lastMove={lastPlacedMove}
-              winningInfo={winningInfo}
-              hintPos={hintPos}
-              showMoveNumbers={showMoveNumbers}
-              theme={theme}
-              moves={moves}
-            />
+            {/* Mobile Horizontal Eval Bar (if enabled) */}
+            {showEvalBar && (
+              <div className="w-full block sm:hidden">
+                <EvalBar evaluation={liveEvaluation} orientation="horizontal" />
+              </div>
+            )}
+
+            {/* Desktop Center Flex: EvalBar + Board */}
+            <div className="flex items-center gap-3 w-full justify-center">
+              {/* Vertical Eval Bar (if enabled) */}
+              {showEvalBar && (
+                <div className="hidden sm:block">
+                  <EvalBar evaluation={liveEvaluation} orientation="vertical" />
+                </div>
+              )}
+
+              {/* Main Gomoku Board */}
+              <Board
+                board={board}
+                onCellClick={handleCellClick}
+                disabled={
+                  isReviewMode ||
+                  gameStatus !== 'playing' ||
+                  isAiThinking ||
+                  (gameMode === 'pve' && currentTurn !== playerColor) ||
+                  gameMode === 'eve'
+                }
+                currentTurn={currentTurn}
+                lastMove={lastPlacedMove}
+                winningInfo={winningInfo}
+                hintPos={hintPos}
+                showMoveNumbers={showMoveNumbers}
+                theme={theme}
+                moves={isReviewMode ? moves.slice(0, reviewStepIndex + 1) : moves}
+                isReviewMode={isReviewMode}
+                reviewedMove={currentReviewedMove}
+              />
+            </div>
 
             {/* Quick Action Controls */}
             <GameControls
@@ -492,19 +611,31 @@ export function App() {
               onGetHint={handleGetHint}
               canHint={gameStatus === 'playing'}
               onResign={handleResign}
+              onStartReview={isReviewMode ? handleCloseReview : handleStartReview}
+              canReview={moves.length > 0}
+              isReviewMode={isReviewMode}
               gameStatus={gameStatus}
               isAiThinking={isAiThinking}
             />
           </div>
 
-          {/* Right Side: Move History & Tactical Log (Desktop 3 cols) */}
+          {/* Right Side: Move History or Game Review Panel (Desktop 3 cols) */}
           <div className="lg:col-span-3 order-3 flex flex-col gap-4">
-            <MoveHistory
-              moves={moves}
-              currentMoveIndex={currentMoveIndex}
-              onJumpToMove={handleJumpToMove}
-              aiExplanation={aiExplanation}
-            />
+            {isReviewMode && reviewSummary ? (
+              <GameReviewPanel
+                summary={reviewSummary}
+                currentStepIndex={reviewStepIndex}
+                onStepChange={handleReviewStepChange}
+                onClose={handleCloseReview}
+              />
+            ) : (
+              <MoveHistory
+                moves={moves}
+                currentMoveIndex={currentMoveIndex}
+                onJumpToMove={handleJumpToMove}
+                aiExplanation={aiExplanation}
+              />
+            )}
           </div>
         </div>
       </main>
@@ -512,7 +643,7 @@ export function App() {
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-4 text-center text-xs text-slate-500">
         <p>
-          Gomoku Master (五目並べ) — Five in a Row Web Game with Minimax AI & Pattern Recognition.
+          Gomoku Master (五目並べ) — Five in a Row Web Game with Minimax AI & Game Review.
         </p>
       </footer>
 
@@ -525,6 +656,7 @@ export function App() {
           difficulty={difficulty}
           totalMoves={moves.length}
           onRematch={handleNewGame}
+          onStartReview={handleStartReview}
           onClose={() => setIsWinnerModalOpen(false)}
         />
       )}

@@ -152,7 +152,7 @@ function getMediumMove(board: BoardState, botPlayer: StoneType): { pos: Position
  * - Minimax with Alpha-Beta Pruning (Depth 2-3 with tactical move ordering)
  * - Deep pattern evaluation and threat foresight
  */
-function getHardMove(board: BoardState, botPlayer: StoneType): AIAnalysis {
+export function getHardMove(board: BoardState, botPlayer: StoneType): AIAnalysis {
   const startTime = Date.now();
   const opponent: StoneType = botPlayer === 'black' ? 'white' : 'black';
 

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import type { Difficulty, GameMode, GameStatus, StoneType } from '../types/game';
-import { Trophy, RefreshCw, Eye, Sparkles, Frown, Equal } from 'lucide-react';
+import { Trophy, RefreshCw, Sparkles, Frown, Equal } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundManager } from '../utils/audio';
 
@@ -11,6 +11,7 @@ interface WinnerModalProps {
   difficulty: Difficulty;
   totalMoves: number;
   onRematch: () => void;
+  onStartReview: () => void;
   onClose: () => void;
 }
 
@@ -21,6 +22,7 @@ export const WinnerModal: React.FC<WinnerModalProps> = ({
   difficulty,
   totalMoves,
   onRematch,
+  onStartReview,
   onClose,
 }) => {
   const isPlayerWin =
@@ -141,17 +143,18 @@ export const WinnerModal: React.FC<WinnerModalProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-3 w-full">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
           <button
             type="button"
             onClick={() => {
               soundManager.playClickSound();
               onClose();
+              onStartReview();
             }}
-            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition-all border border-slate-700"
+            className="w-full sm:flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-teal-600/30 hover:bg-teal-600/50 text-teal-300 text-sm font-bold transition-all border border-teal-500/50 shadow-md"
           >
-            <Eye className="w-4 h-4" />
-            <span>Review Board</span>
+            <Sparkles className="w-4 h-4 text-teal-400" />
+            <span>Game Review</span>
           </button>
 
           <button
@@ -160,7 +163,7 @@ export const WinnerModal: React.FC<WinnerModalProps> = ({
               soundManager.playClickSound();
               onRematch();
             }}
-            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-sm font-bold shadow-lg shadow-amber-500/20 transition-all active:scale-95"
+            className="w-full sm:flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-sm font-bold shadow-lg shadow-amber-500/20 transition-all active:scale-95"
           >
             <RefreshCw className="w-4 h-4" />
             <span>Play Again</span>

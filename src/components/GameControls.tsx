@@ -10,6 +10,7 @@ import {
   Users,
   Cpu,
   Zap,
+  Sparkles,
 } from 'lucide-react';
 import { soundManager } from '../utils/audio';
 
@@ -28,6 +29,9 @@ interface GameControlsProps {
   onGetHint: () => void;
   canHint: boolean;
   onResign: () => void;
+  onStartReview: () => void;
+  canReview: boolean;
+  isReviewMode: boolean;
   gameStatus: GameStatus;
   isAiThinking: boolean;
 }
@@ -47,6 +51,9 @@ export const GameControls: React.FC<GameControlsProps> = ({
   onGetHint,
   canHint,
   onResign,
+  onStartReview,
+  canReview,
+  isReviewMode,
   gameStatus,
   isAiThinking,
 }) => {
@@ -231,7 +238,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
       </div>
 
       {/* Main Action Buttons Bar */}
-      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800 flex-wrap">
         {/* Left: New Game */}
         <button
           type="button"
@@ -246,12 +253,12 @@ export const GameControls: React.FC<GameControlsProps> = ({
           <span>New Game</span>
         </button>
 
-        {/* Center: Undo & Redo & Hint */}
+        {/* Center: Undo & Redo & Hint & Game Review */}
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             id="btn-undo"
-            disabled={!canUndo || isAiThinking}
+            disabled={!canUndo || isAiThinking || isReviewMode}
             onClick={() => {
               soundManager.playUndoSound();
               onUndo();
@@ -266,7 +273,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
           <button
             type="button"
             id="btn-redo"
-            disabled={!canRedo || isAiThinking}
+            disabled={!canRedo || isAiThinking || isReviewMode}
             onClick={() => {
               soundManager.playClickSound();
               onRedo();
@@ -281,7 +288,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
           <button
             type="button"
             id="btn-hint"
-            disabled={!canHint || isAiThinking || gameStatus !== 'playing'}
+            disabled={!canHint || isAiThinking || gameStatus !== 'playing' || isReviewMode}
             onClick={() => {
               soundManager.playClickSound();
               onGetHint();
@@ -292,10 +299,30 @@ export const GameControls: React.FC<GameControlsProps> = ({
             <Lightbulb className="w-4 h-4 text-amber-400" />
             <span className="hidden sm:inline">Hint</span>
           </button>
+
+          {/* Game Review Button */}
+          <button
+            type="button"
+            id="btn-review"
+            disabled={!canReview || isAiThinking}
+            onClick={() => {
+              soundManager.playClickSound();
+              onStartReview();
+            }}
+            title="Review match move-by-move with AI analysis"
+            className={`flex items-center gap-1 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all border shadow-md active:scale-95 ${
+              isReviewMode
+                ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-teal-500/20'
+                : 'bg-slate-800 hover:bg-teal-950/60 hover:text-teal-300 hover:border-teal-500/50 disabled:opacity-40 text-teal-400 border-slate-700'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Review</span>
+          </button>
         </div>
 
         {/* Right: Resign */}
-        {gameStatus === 'playing' && (
+        {gameStatus === 'playing' && !isReviewMode && (
           <button
             type="button"
             id="btn-resign"

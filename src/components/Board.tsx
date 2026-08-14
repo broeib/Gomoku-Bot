@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { BOARD_SIZE } from '../types/game';
-import type { BoardState, BoardTheme, Position, StoneType, WinningInfo, Move } from '../types/game';
+import type {
+  BoardState,
+  BoardTheme,
+  Position,
+  StoneType,
+  WinningInfo,
+  Move,
+  ReviewedMove,
+  MoveClassification,
+} from '../types/game';
 import { STAR_POINTS, formatCoordinate } from '../utils/gomokuLogic';
 
 interface BoardProps {
@@ -14,7 +23,28 @@ interface BoardProps {
   showMoveNumbers: boolean;
   theme: BoardTheme;
   moves: Move[];
+  isReviewMode?: boolean;
+  reviewedMove?: ReviewedMove | null;
 }
+
+const getClassificationBadge = (classification: MoveClassification) => {
+  switch (classification) {
+    case 'brilliant':
+      return { icon: '★', label: 'Brilliant', bg: 'bg-teal-500 text-white', ring: 'ring-teal-400' };
+    case 'best':
+      return { icon: '✓', label: 'Best', bg: 'bg-emerald-500 text-white', ring: 'ring-emerald-400' };
+    case 'good':
+      return { icon: '✓', label: 'Good', bg: 'bg-sky-500 text-white', ring: 'ring-sky-400' };
+    case 'inaccuracy':
+      return { icon: '?!', label: 'Inaccuracy', bg: 'bg-amber-500 text-slate-950', ring: 'ring-amber-400' };
+    case 'mistake':
+      return { icon: '?', label: 'Mistake', bg: 'bg-orange-500 text-white', ring: 'ring-orange-400' };
+    case 'blunder':
+      return { icon: '??', label: 'Blunder', bg: 'bg-rose-600 text-white', ring: 'ring-rose-400' };
+    case 'book':
+      return { icon: '📖', label: 'Book', bg: 'bg-stone-600 text-white', ring: 'ring-stone-400' };
+  }
+};
 
 export const Board: React.FC<BoardProps> = ({
   board,
@@ -27,6 +57,8 @@ export const Board: React.FC<BoardProps> = ({
   showMoveNumbers,
   theme,
   moves,
+  isReviewMode = false,
+  reviewedMove = null,
 }) => {
   const [hoveredPos, setHoveredPos] = useState<Position | null>(null);
 
@@ -83,6 +115,19 @@ export const Board: React.FC<BoardProps> = ({
 
   const colLabels = Array.from({ length: BOARD_SIZE }, (_, i) => String.fromCharCode(65 + i));
   const rowLabels = Array.from({ length: BOARD_SIZE }, (_, i) => BOARD_SIZE - i);
+
+  // Review Best Move Target
+  const isReviewBestMoveTarget = (row: number, col: number) => {
+    if (!isReviewMode || !reviewedMove) return false;
+    const isPlayed = reviewedMove.move.row === row && reviewedMove.move.col === col;
+    const isBest = reviewedMove.bestMove.row === row && reviewedMove.bestMove.col === col;
+    return isBest && !isPlayed;
+  };
+
+  const isReviewedStone = (row: number, col: number) => {
+    if (!isReviewMode || !reviewedMove) return false;
+    return reviewedMove.move.row === row && reviewedMove.move.col === col;
+  };
 
   return (
     <div className="relative select-none flex flex-col items-center justify-center p-2 sm:p-4">
@@ -203,6 +248,24 @@ export const Board: React.FC<BoardProps> = ({
               className="animate-pulse"
             />
           )}
+
+          {/* Review Mode: Arrow/Line connecting Played Move to Best Move if different */}
+          {isReviewMode &&
+            reviewedMove &&
+            (reviewedMove.move.row !== reviewedMove.bestMove.row ||
+              reviewedMove.move.col !== reviewedMove.bestMove.col) && (
+              <g className="opacity-80">
+                <line
+                  x1={(reviewedMove.move.col / (BOARD_SIZE - 1)) * 1400}
+                  y1={(reviewedMove.move.row / (BOARD_SIZE - 1)) * 1400}
+                  x2={(reviewedMove.bestMove.col / (BOARD_SIZE - 1)) * 1400}
+                  y2={(reviewedMove.bestMove.row / (BOARD_SIZE - 1)) * 1400}
+                  stroke="#10b981"
+                  strokeWidth="6"
+                  strokeDasharray="8 8"
+                />
+              </g>
+            )}
         </svg>
 
         {/* Interactive 15x15 Grid Intersections */}
@@ -227,6 +290,8 @@ export const Board: React.FC<BoardProps> = ({
               const isWin = isWinningPos(row, col);
               const isHint = hintPos?.row === row && hintPos?.col === col && !stone;
               const moveNum = moveNumberMap.get(`${row},${col}`);
+              const isReviewed = isReviewedStone(row, col);
+              const isBestMoveTarget = isReviewBestMoveTarget(row, col);
 
               return (
                 <button
@@ -244,7 +309,11 @@ export const Board: React.FC<BoardProps> = ({
                     <div
                       className={`relative w-[86%] h-[86%] rounded-full flex items-center justify-center stone-enter ${
                         stone === 'black' ? 'stone-black text-slate-200' : 'stone-white text-slate-800'
-                      } ${isWin ? 'stone-winning ring-4 ring-amber-400' : ''}`}
+                      } ${isWin ? 'stone-winning ring-4 ring-amber-400' : ''} ${
+                        isReviewed
+                          ? `ring-4 ${getClassificationBadge(reviewedMove!.classification).ring} shadow-lg scale-105`
+                          : ''
+                      }`}
                     >
                       {/* Move number display */}
                       {showMoveNumbers && moveNum !== undefined && (
@@ -254,13 +323,36 @@ export const Board: React.FC<BoardProps> = ({
                       )}
 
                       {/* Last Move Indicator Marker */}
-                      {isLast && !isWin && (
+                      {isLast && !isWin && !isReviewed && (
                         <div
                           className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${
                             stone === 'black' ? 'bg-amber-400' : 'bg-red-500'
                           } shadow-sm animate-pulse`}
                         />
                       )}
+
+                      {/* Review Mode Badge on stone */}
+                      {isReviewed && (
+                        <div
+                          className={`absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-extrabold shadow-md ${
+                            getClassificationBadge(reviewedMove!.classification).bg
+                          }`}
+                        >
+                          {getClassificationBadge(reviewedMove!.classification).icon}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Review Mode Suggested Best Move Indicator */}
+                  {isBestMoveTarget && (
+                    <div
+                      className="absolute w-[86%] h-[86%] rounded-full border-2 border-emerald-400 bg-emerald-400/25 flex items-center justify-center animate-pulse pointer-events-none"
+                      title={`Best Move: ${formatCoordinate(row, col)}`}
+                    >
+                      <div className="w-3 h-3 rounded-full bg-emerald-400 shadow-md flex items-center justify-center text-[8px] font-bold text-slate-950">
+                        ★
+                      </div>
                     </div>
                   )}
 

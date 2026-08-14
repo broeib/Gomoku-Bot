@@ -1,6 +1,6 @@
 import React from 'react';
 import type { BoardTheme } from '../types/game';
-import { Volume2, VolumeX, HelpCircle, Hash } from 'lucide-react';
+import { Volume2, VolumeX, HelpCircle, Hash, Activity } from 'lucide-react';
 import { soundManager } from '../utils/audio';
 
 interface NavbarProps {
@@ -10,6 +10,8 @@ interface NavbarProps {
   onToggleMute: () => void;
   showMoveNumbers: boolean;
   onToggleMoveNumbers: () => void;
+  showEvalBar: boolean;
+  onToggleEvalBar: () => void;
   onOpenRules: () => void;
 }
 
@@ -20,6 +22,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleMute,
   showMoveNumbers,
   onToggleMoveNumbers,
+  showEvalBar,
+  onToggleEvalBar,
   onOpenRules,
 }) => {
   return (
@@ -101,6 +105,25 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </div>
 
+          {/* Toggle Eval Bar Button */}
+          <button
+            type="button"
+            id="toggle-eval-bar"
+            onClick={() => {
+              soundManager.playClickSound();
+              onToggleEvalBar();
+            }}
+            title={showEvalBar ? 'Hide Evaluation Bar (E)' : 'Show Evaluation Bar (E)'}
+            className={`p-2 rounded-xl border transition-all flex items-center gap-1 text-xs font-semibold ${
+              showEvalBar
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow'
+                : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            <span className="hidden md:inline text-[11px]">Eval</span>
+          </button>
+
           {/* Move Numbers Toggle */}
           <button
             type="button"
@@ -124,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             id="toggle-sound"
             onClick={onToggleMute}
-            title={isMuted ? 'Unmute audio effects' : 'Mute audio effects'}
+            title={isMuted ? 'Unmute audio effects' : 'Mute audio effects (M)'}
             className={`p-2 rounded-xl border transition-all ${
               !isMuted
                 ? 'bg-slate-900 text-slate-200 border-slate-800 hover:text-amber-400'

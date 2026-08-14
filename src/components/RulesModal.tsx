@@ -123,6 +123,10 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
                 <kbd className="px-2 py-0.5 bg-slate-800 text-slate-200 rounded font-mono text-[10px]">H</kbd>
               </div>
               <div className="flex items-center justify-between bg-slate-950/40 p-2 rounded-lg border border-slate-800">
+                <span className="text-slate-400">Toggle Eval Bar</span>
+                <kbd className="px-2 py-0.5 bg-slate-800 text-slate-200 rounded font-mono text-[10px]">E</kbd>
+              </div>
+              <div className="flex items-center justify-between bg-slate-950/40 p-2 rounded-lg border border-slate-800">
                 <span className="text-slate-400">New Game</span>
                 <kbd className="px-2 py-0.5 bg-slate-800 text-slate-200 rounded font-mono text-[10px]">N</kbd>
               </div>
