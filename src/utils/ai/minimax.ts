@@ -27,11 +27,16 @@ const zobristTableHigh: number[][][] = Array(BOARD_SIZE)
       ])
   );
 
+const zobristTurn = [
+  Math.floor(Math.random() * 0x7fffffff),
+  Math.floor(Math.random() * 0x7fffffff),
+];
+
 // Transposition Table (Map with 64-bit combined string key or number)
 const tt = new Map<number, TTEntry>();
 
-export function getZobristHash(board: BoardState): number {
-  let hash = 0;
+export function getZobristHash(board: BoardState, isMaximizing: boolean = true): number {
+  let hash = isMaximizing ? zobristTurn[0] : zobristTurn[1];
   for (let r = 0; r < BOARD_SIZE; r++) {
     for (let c = 0; c < BOARD_SIZE; c++) {
       const stone = board[r][c];
@@ -163,7 +168,19 @@ export function getOrderedCandidates(
   // Sort descending by score
   scoredMoves.sort((a, b) => b.score - a.score);
 
-  return scoredMoves.slice(0, limit).map((m) => m.pos);
+  // Guarantee critical tactical threats (open fours, double threes, direct defense) are never pruned
+  const highThreats = scoredMoves.filter(
+    (m) => m.score >= PATTERN_SCORES.OPEN_THREE * 0.8
+  );
+  const remaining = scoredMoves.filter(
+    (m) => m.score < PATTERN_SCORES.OPEN_THREE * 0.8
+  );
+  const selected = [
+    ...highThreats,
+    ...remaining.slice(0, Math.max(0, limit - highThreats.length)),
+  ];
+
+  return selected.map((m) => m.pos);
 }
 
 export interface MinimaxResult {
@@ -190,6 +207,9 @@ export function minimaxAlphaBeta(
 ): { score: number; bestMove?: Position } {
   stats.nodes++;
 
+  const originalAlpha = alpha;
+  const originalBeta = beta;
+
   const minPlayer: StoneType = maxPlayer === 'black' ? 'white' : 'black';
   const currentPlayer = isMaximizing ? maxPlayer : minPlayer;
 
@@ -199,7 +219,7 @@ export function minimaxAlphaBeta(
   }
 
   // Transposition Table lookup
-  const boardHash = getZobristHash(board);
+  const boardHash = getZobristHash(board, isMaximizing);
   const cached = tt.get(boardHash);
   let ttBestMove: Position | null = null;
 
@@ -330,10 +350,10 @@ export function minimaxAlphaBeta(
       }
     }
 
-    // Save to Transposition Table
+    // Save to Transposition Table with correct bounds flags
     let flag: 'EXACT' | 'LOWER' | 'UPPER' = 'EXACT';
-    if (maxEval <= alpha) flag = 'UPPER';
-    else if (maxEval >= beta) flag = 'LOWER';
+    if (maxEval <= originalAlpha) flag = 'UPPER';
+    else if (maxEval >= originalBeta) flag = 'LOWER';
     tt.set(boardHash, { depth, score: maxEval, flag, bestMove });
 
     return { score: maxEval, bestMove };
@@ -365,6 +385,7 @@ export function minimaxAlphaBeta(
           );
           evalScore = res.score;
         } else {
+          // Null-window search for minimizing player: test if score < beta
           const res = minimaxAlphaBeta(
             board,
             depth - 1,
@@ -379,7 +400,8 @@ export function minimaxAlphaBeta(
           );
           evalScore = res.score;
 
-          if (evalScore > alpha && evalScore < beta) {
+          // If null-window failed low, re-search with full window
+          if (evalScore < beta && evalScore > alpha) {
             const reSearch = minimaxAlphaBeta(
               board,
               depth - 1,
@@ -426,8 +448,8 @@ export function minimaxAlphaBeta(
     }
 
     let flag: 'EXACT' | 'LOWER' | 'UPPER' = 'EXACT';
-    if (minEval <= alpha) flag = 'UPPER';
-    else if (minEval >= beta) flag = 'LOWER';
+    if (minEval <= originalAlpha) flag = 'UPPER';
+    else if (minEval >= originalBeta) flag = 'LOWER';
     tt.set(boardHash, { depth, score: minEval, flag, bestMove });
 
     return { score: minEval, bestMove };
@@ -444,6 +466,7 @@ export function iterativeDeepeningSearch(
   maxTimeMs: number
 ): MinimaxResult {
   const startTime = Date.now();
+  clearTranspositionTable();
   resetSearchTables();
 
   const stats = { nodes: 0 };

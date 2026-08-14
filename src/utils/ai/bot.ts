@@ -1,7 +1,7 @@
 import type { BoardState, Difficulty, Position, StoneType, AIAnalysis } from '../../types/game';
 import { cloneBoard, formatCoordinate, getCandidateMoves } from '../gomokuLogic';
 import { evaluatePoint, PATTERN_SCORES } from './patterns';
-import { iterativeDeepeningSearch, minimaxAlphaBeta } from './minimax';
+import { clearTranspositionTable, iterativeDeepeningSearch, minimaxAlphaBeta, resetSearchTables } from './minimax';
 import { queryOpeningBook } from './openingBook';
 import { solveVCF, findVCFDefense } from './vcf';
 import { solveVCT } from './vct';
@@ -200,8 +200,47 @@ export function getHardMove(board: BoardState, botPlayer: StoneType): AIAnalysis
     }
   }
 
+  for (const pos of candidates) {
+    const attack = evaluatePoint(board, pos.row, pos.col, botPlayer);
+    if (attack >= PATTERN_SCORES.OPEN_FOUR) {
+      return {
+        bestMove: pos,
+        score: attack,
+        explanation: explainMove(board, pos, botPlayer),
+        depth: 1,
+        nodesEvaluated: 1,
+        durationMs: Date.now() - startTime,
+      };
+    }
+  }
+
+  let hardOpenFourBlock: Position | null = null;
+  let hardOpenFourBlockScore = -Infinity;
+  for (const pos of candidates) {
+    const def = evaluatePoint(board, pos.row, pos.col, opponent);
+    if (def >= PATTERN_SCORES.OPEN_FOUR) {
+      const atk = evaluatePoint(board, pos.row, pos.col, botPlayer);
+      if (atk > hardOpenFourBlockScore) {
+        hardOpenFourBlockScore = atk;
+        hardOpenFourBlock = pos;
+      }
+    }
+  }
+  if (hardOpenFourBlock) {
+    return {
+      bestMove: hardOpenFourBlock,
+      score: PATTERN_SCORES.OPEN_FOUR,
+      explanation: explainMove(board, hardOpenFourBlock, botPlayer),
+      depth: 1,
+      nodesEvaluated: 1,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
   // Minimax search at depth 4
   const searchBoard = cloneBoard(board);
+  clearTranspositionTable();
+  resetSearchTables();
   const stats = { nodes: 0 };
   const searchDepth = 4;
 
@@ -279,6 +318,43 @@ export function getExpertMove(board: BoardState, botPlayer: StoneType): AIAnalys
         durationMs: Date.now() - startTime,
       };
     }
+  }
+
+  for (const pos of candidates) {
+    const attack = evaluatePoint(board, pos.row, pos.col, botPlayer);
+    if (attack >= PATTERN_SCORES.OPEN_FOUR) {
+      return {
+        bestMove: pos,
+        score: attack,
+        explanation: explainMove(board, pos, botPlayer),
+        depth: 1,
+        nodesEvaluated: 1,
+        durationMs: Date.now() - startTime,
+      };
+    }
+  }
+
+  let expertOpenFourBlock: Position | null = null;
+  let expertOpenFourBlockScore = -Infinity;
+  for (const pos of candidates) {
+    const def = evaluatePoint(board, pos.row, pos.col, opponent);
+    if (def >= PATTERN_SCORES.OPEN_FOUR) {
+      const atk = evaluatePoint(board, pos.row, pos.col, botPlayer);
+      if (atk > expertOpenFourBlockScore) {
+        expertOpenFourBlockScore = atk;
+        expertOpenFourBlock = pos;
+      }
+    }
+  }
+  if (expertOpenFourBlock) {
+    return {
+      bestMove: expertOpenFourBlock,
+      score: PATTERN_SCORES.OPEN_FOUR,
+      explanation: explainMove(board, expertOpenFourBlock, botPlayer),
+      depth: 1,
+      nodesEvaluated: 1,
+      durationMs: Date.now() - startTime,
+    };
   }
 
   // 2. VCF Search for Bot (Depth 16)
@@ -362,7 +438,7 @@ export function getGodMove(board: BoardState, botPlayer: StoneType): AIAnalysis 
     };
   }
 
-  // 2. Fast Immediate Win / Block
+  // 2. Fast Immediate Win / Block (5-in-a-row & Open-Four)
   for (const pos of candidates) {
     const attack = evaluatePoint(board, pos.row, pos.col, botPlayer);
     if (attack >= PATTERN_SCORES.WIN_FIVE) {
@@ -389,6 +465,43 @@ export function getGodMove(board: BoardState, botPlayer: StoneType): AIAnalysis 
         durationMs: Date.now() - startTime,
       };
     }
+  }
+
+  for (const pos of candidates) {
+    const attack = evaluatePoint(board, pos.row, pos.col, botPlayer);
+    if (attack >= PATTERN_SCORES.OPEN_FOUR) {
+      return {
+        bestMove: pos,
+        score: attack,
+        explanation: explainMove(board, pos, botPlayer),
+        depth: 1,
+        nodesEvaluated: 1,
+        durationMs: Date.now() - startTime,
+      };
+    }
+  }
+
+  let godOpenFourBlock: Position | null = null;
+  let godOpenFourBlockScore = -Infinity;
+  for (const pos of candidates) {
+    const def = evaluatePoint(board, pos.row, pos.col, opponent);
+    if (def >= PATTERN_SCORES.OPEN_FOUR) {
+      const atk = evaluatePoint(board, pos.row, pos.col, botPlayer);
+      if (atk > godOpenFourBlockScore) {
+        godOpenFourBlockScore = atk;
+        godOpenFourBlock = pos;
+      }
+    }
+  }
+  if (godOpenFourBlock) {
+    return {
+      bestMove: godOpenFourBlock,
+      score: PATTERN_SCORES.OPEN_FOUR,
+      explanation: explainMove(board, godOpenFourBlock, botPlayer),
+      depth: 1,
+      nodesEvaluated: 1,
+      durationMs: Date.now() - startTime,
+    };
   }
 
   // 3. Deep VCF Search for Bot (Depth 24)

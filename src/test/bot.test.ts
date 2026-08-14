@@ -26,6 +26,13 @@ describe('Gomoku AI & Minimax Engine', () => {
 
       expect(getZobristHash(b1)).not.toBe(getZobristHash(b2));
     });
+
+    it('should generate different hash for different turns on identical board', () => {
+      const b = createEmptyBoard();
+      b[7][7] = 'black';
+
+      expect(getZobristHash(b, true)).not.toBe(getZobristHash(b, false));
+    });
   });
 
   describe('Move Ordering & Candidate Ranking', () => {
