@@ -46,7 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-slate-400 hidden sm:block">
-              Five in a Row • Minimax & Pattern AI
+              Six in a Row • Minimax & Pattern AI
             </p>
           </div>
         </div>
@@ -63,11 +63,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onSelectTheme('kaya');
               }}
               title="Kaya Wood Board"
-              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-                theme === 'kaya'
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${theme === 'kaya'
                   ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               Kaya
             </button>
@@ -79,11 +78,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onSelectTheme('dark');
               }}
               title="Dark Rosewood Board"
-              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-                theme === 'dark'
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${theme === 'dark'
                   ? 'bg-amber-950 text-amber-200 border border-amber-800 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               Dark
             </button>
@@ -95,11 +93,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onSelectTheme('slate');
               }}
               title="Modern Slate Board"
-              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-                theme === 'slate'
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${theme === 'slate'
                   ? 'bg-slate-800 text-slate-200 border border-slate-700 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               Slate
             </button>
@@ -114,11 +111,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               onToggleEvalBar();
             }}
             title={showEvalBar ? 'Hide Evaluation Bar (E)' : 'Show Evaluation Bar (E)'}
-            className={`p-2 rounded-xl border transition-all flex items-center gap-1 text-xs font-semibold ${
-              showEvalBar
+            className={`p-2 rounded-xl border transition-all flex items-center gap-1 text-xs font-semibold ${showEvalBar
                 ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow'
                 : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-            }`}
+              }`}
           >
             <Activity className="w-4 h-4" />
             <span className="hidden md:inline text-[11px]">Eval</span>
@@ -133,11 +129,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               onToggleMoveNumbers();
             }}
             title={showMoveNumbers ? 'Hide move numbers' : 'Show move numbers on stones'}
-            className={`p-2 rounded-xl border transition-all ${
-              showMoveNumbers
+            className={`p-2 rounded-xl border transition-all ${showMoveNumbers
                 ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow'
                 : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-            }`}
+              }`}
           >
             <Hash className="w-4 h-4" />
           </button>
@@ -148,11 +143,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="toggle-sound"
             onClick={onToggleMute}
             title={isMuted ? 'Unmute audio effects' : 'Mute audio effects (M)'}
-            className={`p-2 rounded-xl border transition-all ${
-              !isMuted
+            className={`p-2 rounded-xl border transition-all ${!isMuted
                 ? 'bg-slate-900 text-slate-200 border-slate-800 hover:text-amber-400'
                 : 'bg-rose-950/30 text-rose-400 border-rose-900/40'
-            }`}
+              }`}
           >
             {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
